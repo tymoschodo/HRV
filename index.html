@@ -802,13 +802,16 @@ async function handleFiles(files) {
     const featuresText = await readFile(fileMap.features);
     const featuresRaw = parseFeaturesCsv(featuresText);
     const features = normalizeFeatures(featuresRaw);
+    console.log('DEBUG features[0]:', JSON.stringify(features[0]));
 
     progress.innerHTML += '<br>⟳ Parsowanie KUBIOS RR...';
     const kubiosText = await readFile(fileMap.kubios);
     const rrIntervals = parseKubios(kubiosText);
+    console.log('DEBUG rrIntervals count:', rrIntervals.length, 'first 5:', rrIntervals.slice(0,5));
 
     const sessionDate = extractDate(fileMap.features.name);
     const summary = computeSummary(features);
+    console.log('DEBUG summary:', JSON.stringify(summary));
 
     progress.innerHTML += '<br>⟳ Zapisuję do Firestore...';
     const sessionRef = doc(db, 'users', currentUser.uid, 'sessions', sessionDate);
