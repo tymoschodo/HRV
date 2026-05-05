@@ -869,6 +869,13 @@ function parseFeaturesCsv(text) {
 }
 
 
+function parseKubios(text) {
+  const cleaned = text.trim().replace(/\n/g, ' ');
+  return cleaned.split(/\s+/)
+    .map(s => parseInt(s))
+    .filter(n => !isNaN(n) && n > 300 && n < 2000);
+}
+
 function normalizeFeatures(features) {
   return features.map(row => {
     const clean = {};
