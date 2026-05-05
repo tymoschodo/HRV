@@ -851,31 +851,24 @@ function extractDate(filename) {
 }
 
 function parseFeaturesCsv(text) {
-  const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim());
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  // Split by ', ' (comma+space) - this CSV uses ', ' as separator
+  // which correctly handles datetime fields containing spaces
+  const headers = lines[0].split(', ').map(h => h.trim());
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const vals = lines[i].split(',');
+    const vals = lines[i].split(', ');
     const obj = {};
-    headers.forEach((h, idx) => {
-      const v = vals[idx]?.trim();
-      obj[h] = (v === '' || v == null || isNaN(v)) ? v : parseFloat(v);
+    headers.forEach((h, colIdx) => {
+      const v = vals[colIdx]?.trim() ?? '';
+      obj[h] = (v === '' || isNaN(v)) ? v : parseFloat(v);
     });
     rows.push(obj);
   }
   return rows;
 }
 
-function parseKubios(text) {
-  // Handles both single-line (space-separated) and multi-line formats
-  const cleaned = text.trim().replace(/\n/g, ' ');
-  return cleaned.split(/\s+/)
-    .map(s => parseInt(s))
-    .filter(n => !isNaN(n) && n > 300 && n < 2000);
-}
 
-// Normalize feature keys - strips spaces from all keys (defensive)
 function normalizeFeatures(features) {
   return features.map(row => {
     const clean = {};
