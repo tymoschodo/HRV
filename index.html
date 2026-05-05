@@ -800,7 +800,8 @@ async function handleFiles(files) {
   try {
     progress.innerHTML = '⟳ Parsowanie Features CSV...';
     const featuresText = await readFile(fileMap.features);
-    const features = parseFeaturesCsv(featuresText);
+    const featuresRaw = parseFeaturesCsv(featuresText);
+    const features = normalizeFeatures(featuresRaw);
 
     progress.innerHTML += '<br>⟳ Parsowanie KUBIOS RR...';
     const kubiosText = await readFile(fileMap.kubios);
@@ -851,11 +852,12 @@ function parseFeaturesCsv(text) {
   const headers = lines[0].split(',').map(h => h.trim());
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
     const vals = lines[i].split(',');
     const obj = {};
     headers.forEach((h, idx) => {
       const v = vals[idx]?.trim();
-      obj[h] = isNaN(v) || v === '' ? v : parseFloat(v);
+      obj[h] = (v === '' || v == null || isNaN(v)) ? v : parseFloat(v);
     });
     rows.push(obj);
   }
@@ -863,9 +865,20 @@ function parseFeaturesCsv(text) {
 }
 
 function parseKubios(text) {
-  return text.trim().split('\n')
-    .map(l => parseInt(l.trim()))
-    .filter(n => !isNaN(n) && n > 200 && n < 2500);
+  // Handles both single-line (space-separated) and multi-line formats
+  const cleaned = text.trim().replace(/\n/g, ' ');
+  return cleaned.split(/\s+/)
+    .map(s => parseInt(s))
+    .filter(n => !isNaN(n) && n > 300 && n < 2000);
+}
+
+// Normalize feature keys - strips spaces from all keys (defensive)
+function normalizeFeatures(features) {
+  return features.map(row => {
+    const clean = {};
+    for (const [k, v] of Object.entries(row)) clean[k.trim()] = v;
+    return clean;
+  });
 }
 
 function computeSummary(features) {
@@ -907,7 +920,16 @@ async function loadAllSessions() {
   if (!currentUser || !db) return;
   const q = query(collection(db, 'users', currentUser.uid, 'sessions'), orderBy('date', 'desc'), limit(60));
   const snap = await getDocs(q);
-  allSessions = snap.docs.map(d => d.data()).sort((a,b) => a.date > b.date ? 1 : -1);
+  allSessions = snap.docs.map(d => {
+    const data = d.data();
+    // Normalize feature keys in case old sessions were saved with spaces
+    if (data.features) data.features = normalizeFeatures(data.features);
+    // Recompute summary if it's empty (old sessions)
+    if (data.features && data.features.length && (!data.summary || data.summary.rmssd == null)) {
+      data.summary = computeSummary(data.features);
+    }
+    return data;
+  }).sort((a,b) => a.date > b.date ? 1 : -1);
 
   if (!allSessions.length) {
     document.getElementById('empty-state').classList.add('visible');
