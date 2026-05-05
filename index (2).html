@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HRV — System Nerwowy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;1,300&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<style>
+:root {
+  --bg: #09090e;
+  --bg2: #111118;
+  --bg3: #1a1a24;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --green: #00e87a;
+  --green-dim: rgba(0,232,122,0.12);
+  --coral: #ff6b6b;
+  --coral-dim: rgba(255,107,107,0.12);
+  --amber: #ffc947;
+  --amber-dim: rgba(255,201,71,0.12);
+  --blue: #4d9fff;
+  --blue-dim: rgba(77,159,255,0.1);
+  --text: #e8e8f0;
+  --text2: #888899;
+  --text3: #555566;
+  --mono: 'DM Mono', monospace;
+  --serif: 'Fraunces', Georgia, serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* NOISE TEXTURE */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+/* LOGIN SCREEN */
+#login-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+.login-title {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 6vw, 4rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.login-title em {
+  font-style: italic;
+  color: var(--green);
+}
+
+.login-sub {
+  color: var(--text2);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg3);
+  border: 0.5px solid var(--border2);
+  color: var(--text);
+  padding: 12px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-google:hover { background: #222230; border-color: rgba(255,255,255,0.2); }
+.btn-google svg { width: 18px; height: 18px; }
+
+/* APP LAYOUT */
+#app { display: none; position: relative; z-index: 1; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 0.5px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(9,9,14,0.92);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+
+.topbar-logo {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+.topbar-logo em { font-style: italic; color: var(--green); }
+
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+
+.user-name { color: var(--text2); font-size: 11px; letter-spacing: 0.05em; }
+
+.btn-logout, .btn-upload {
+  background: none;
+  border: 0.5px solid var(--border2);
+  color: var(--text2);
+  padding: 6px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+.btn-logout:hover { color: var(--coral); border-color: var(--coral); }
+.btn-upload {
+  color: var(--green);
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+.btn-upload:hover { background: rgba(0,232,122,0.2); }
+
+.main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+
+/* UPLOAD ZONE */
+#upload-zone {
+  border: 1px dashed var(--border2);
+  border-radius: 8px;
+  padding: 48px 32px;
+  text-align: center;
+  margin-bottom: 32px;
+  transition: all 0.2s;
+  cursor: pointer;
+  display: none;
+}
+#upload-zone.visible { display: block; }
+#upload-zone.drag-over { border-color: var(--green); background: var(--green-dim); }
+
+.upload-icon { font-size: 32px; margin-bottom: 16px; opacity: 0.4; }
+.upload-title { font-family: var(--serif); font-size: 20px; font-weight: 300; margin-bottom: 8px; }
+.upload-sub { color: var(--text2); font-size: 12px; line-height: 1.8; }
+.upload-sub code { color: var(--green); background: var(--green-dim); padding: 1px 6px; border-radius: 3px; }
+
+#file-input { display: none; }
+
+.upload-progress {
+  display: none;
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--bg3);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text2);
+  text-align: left;
+  line-height: 2;
+}
+.upload-progress.visible { display: block; }
+.progress-ok { color: var(--green); }
+.progress-err { color: var(--coral); }
+
+/* STATUS BAR */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 28px;
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: 0.04em;
+}
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+}
+.status-dot.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.status-dot.red { background: var(--coral); box-shadow: 0 0 8px var(--coral); }
+
+/* DATE SELECTOR */
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.date-label { color: var(--text2); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.date-btn {
+  background: var(--bg3);
+  border: 0.5px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.date-btn:hover, .date-btn.active { border-color: var(--green); color: var(--green); }
+
+/* BIG METRICS */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+
+.metric-cell {
+  background: var(--bg2);
+  padding: 20px 20px 18px;
+  position: relative;
+  transition: background 0.15s;
+}
+.metric-cell:hover { background: var(--bg3); }
+
+.metric-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+.metric-value {
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.metric-unit { font-size: 13px; color: var(--text2); font-family: var(--mono); }
+.metric-delta {
+  font-size: 11px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.delta-up { color: var(--coral); }
+.delta-down { color: var(--green); }
+.delta-neutral { color: var(--text3); }
+
+.metric-cell.good .metric-value { color: var(--green); }
+.metric-cell.warn .metric-value { color: var(--amber); }
+.metric-cell.bad .metric-value { color: var(--coral); }
+
+/* INTERPRETATION */
+.interpretation-box {
+  background: var(--bg2);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 24px 28px;
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.interpretation-box::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+}
+.interpretation-box.good::before { background: var(--green); }
+.interpretation-box.warn::before { background: var(--amber); }
+.interpretation-box.bad::before { background: var(--coral); }
+
+.interp-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.interp-tag {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 2px;
+}
+.interp-tag.good { background: var(--green-dim); color: var(--green); }
+.interp-tag.warn { background: var(--amber-dim); color: var(--amber); }
+.interp-tag.bad { background: var(--coral-dim); color: var(--coral); }
+
+.interp-date { color: var(--text3); font-size: 11px; }
+
+.interp-text {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.75;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.interp-text.loading { color: var(--text2); font-style: italic; }
+
+/* CHARTS */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+.chart-panel {
+  background: var(--bg2);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.chart-panel.wide {
+  grid-column: 1 / -1;
+}
+
+.chart-title {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chart-title span { color: var(--text2); font-size: 11px; letter-spacing: 0.04em; text-transform: none; }
+
+.chart-wrap { position: relative; width: 100%; }
+
+/* HISTORY TABLE */
+.history-panel {
+  background: var(--bg2);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+
+.history-header {
+  padding: 16px 20px;
+  border-bottom: 0.5px solid var(--border);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.history-table { width: 100%; border-collapse: collapse; }
+.history-table th {
+  padding: 10px 20px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  border-bottom: 0.5px solid var(--border);
+  font-weight: 400;
+}
+.history-table td {
+  padding: 12px 20px;
+  font-size: 12px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text2);
+}
+.history-table tr:last-child td { border-bottom: none; }
+.history-table tr { cursor: pointer; transition: background 0.1s; }
+.history-table tr:hover td { background: var(--bg3); }
+.history-table td:first-child { color: var(--text); font-size: 13px; }
+.td-good { color: var(--green) !important; }
+.td-warn { color: var(--amber) !important; }
+.td-bad { color: var(--coral) !important; }
+
+/* CONFIG MODAL */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.visible { display: flex; }
+
+.modal {
+  background: var(--bg2);
+  border: 0.5px solid var(--border2);
+  border-radius: 8px;
+  padding: 32px;
+  width: 520px;
+  max-width: 90vw;
+}
+
+.modal-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 300;
+  margin-bottom: 8px;
+}
+.modal-sub { color: var(--text2); font-size: 12px; margin-bottom: 24px; line-height: 1.7; }
+
+.field-group { margin-bottom: 20px; }
+.field-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+  display: block;
+}
+.field-input {
+  width: 100%;
+  background: var(--bg3);
+  border: 0.5px solid var(--border2);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field-input:focus { border-color: var(--green); }
+.field-hint { color: var(--text3); font-size: 11px; margin-top: 6px; line-height: 1.6; }
+.field-hint a { color: var(--blue); }
+
+.modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; }
+.btn-primary {
+  background: var(--green);
+  color: #000;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  transition: opacity 0.2s;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-secondary {
+  background: none;
+  border: 0.5px solid var(--border2);
+  color: var(--text2);
+  padding: 10px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { border-color: var(--text2); color: var(--text); }
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center;
+  padding: 80px 32px;
+  display: none;
+}
+.empty-state.visible { display: block; }
+.empty-title { font-family: var(--serif); font-size: 24px; font-weight: 300; margin-bottom: 12px; }
+.empty-sub { color: var(--text2); font-size: 13px; line-height: 1.8; }
+
+/* LOADER */
+.spinner {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--border2);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ANIMATIONS */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.4s ease forwards; }
+
+.no-sessions { padding: 40px 20px; text-align: center; color: var(--text3); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-title">System<br><em>Nerwowy</em></div>
+  <div class="login-sub">HRV · DFA · Analiza regeneracji</div>
+  <button class="btn-google" id="btn-signin">
+    <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    Zaloguj przez Google
+  </button>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">System <em>Nerwowy</em></div>
+    <div class="topbar-right">
+      <span class="user-name" id="user-name"></span>
+      <button class="btn-upload" id="btn-upload">+ Wgraj sesję</button>
+      <button class="btn-logout" id="btn-config">⚙ Konfiguracja</button>
+      <button class="btn-logout" id="btn-logout">Wyloguj</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- UPLOAD ZONE -->
+    <div id="upload-zone">
+      <div class="upload-icon">↑</div>
+      <div class="upload-title">Wgraj pliki sesji</div>
+      <div class="upload-sub">
+        Zaznacz wszystkie 4 pliki naraz w Finderze i upuść tutaj, lub kliknij<br>
+        <code>Features_.csv</code> &nbsp;<code>HR_.csv</code> &nbsp;<code>RR_.csv</code> &nbsp;<code>RR_KUBIOS_.txt</code>
+      </div>
+      <input type="file" id="file-input" multiple accept=".csv,.txt">
+      <div class="upload-progress" id="upload-progress"></div>
+    </div>
+
+    <!-- STATUS -->
+    <div class="status-bar" id="status-bar" style="display:none;">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">—</span>
+      <span style="margin-left:auto; color: var(--text3);" id="status-baseline"></span>
+    </div>
+
+    <!-- DATE SELECTOR -->
+    <div class="date-row" id="date-row" style="display:none;">
+      <span class="date-label">Sesja:</span>
+      <div id="date-buttons"></div>
+    </div>
+
+    <!-- METRICS -->
+    <div class="metrics-grid" id="metrics-grid" style="display:none;"></div>
+
+    <!-- INTERPRETATION -->
+    <div class="interpretation-box" id="interp-box" style="display:none;">
+      <div class="interp-header">
+        <span class="interp-tag" id="interp-tag">—</span>
+        <span class="interp-date" id="interp-date"></span>
+      </div>
+      <div class="interp-text" id="interp-text">Analizuję...</div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="charts-grid" id="charts-grid" style="display:none;">
+      <div class="chart-panel wide">
+        <div class="chart-title">rMSSD — trend <span id="rmssd-baseline-label"></span></div>
+        <div class="chart-wrap" style="height:180px;"><canvas id="chart-rmssd" role="img" aria-label="Trend rMSSD w czasie"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">Dzisiejsza sesja — rMSSD <span>parasympatyczny</span></div>
+        <div class="chart-wrap" style="height:160px;"><canvas id="chart-session-rmssd" role="img" aria-label="rMSSD dzisiejszej sesji"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">LF/HF ratio <span>balans układu nerwowego</span></div>
+        <div class="chart-wrap" style="height:160px;"><canvas id="chart-lfhf" role="img" aria-label="LF/HF ratio"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">HR spoczynkowe <span>trend</span></div>
+        <div class="chart-wrap" style="height:160px;"><canvas id="chart-hr" role="img" aria-label="Trend HR"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">DFA alpha1 <span>fraktalna dynamika</span></div>
+        <div class="chart-wrap" style="height:160px;"><canvas id="chart-alpha1" role="img" aria-label="DFA alpha1"></canvas></div>
+      </div>
+    </div>
+
+    <!-- EMPTY STATE -->
+    <div class="empty-state" id="empty-state">
+      <div class="empty-title">Brak danych</div>
+      <div class="empty-sub">Wgraj pierwszą sesję używając przycisku powyżej.<br>Po 7 dniach aplikacja zacznie porównywać Twój stan<br>do osobistego baseline.</div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="history-panel" id="history-panel" style="display:none;">
+      <div class="history-header">Historia sesji</div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>rMSSD śr.</th>
+            <th>HR śr.</th>
+            <th>SDNN śr.</th>
+            <th>LF/HF śr.</th>
+            <th>alpha1 śr.</th>
+            <th>vs baseline</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="modal-overlay" id="config-modal">
+  <div class="modal">
+    <div class="modal-title">Konfiguracja</div>
+    <div class="modal-sub">Podaj dane swojego projektu Firebase oraz klucz API Anthropic do generowania interpretacji tekstowych.</div>
+
+    <div class="field-group">
+      <label class="field-label">Firebase Config (JSON)</label>
+      <textarea class="field-input" id="cfg-firebase" rows="6" placeholder='{
+  "apiKey": "...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+      <div class="field-hint">Z Firebase Console → Project Settings → Your apps → SDK setup</div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Anthropic API Key</label>
+      <input type="password" class="field-input" id="cfg-anthropic" placeholder="sk-ant-...">
+      <div class="field-hint">Z <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys. Klucz przechowywany jest lokalnie w przeglądarce.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancel-config">Anuluj</button>
+      <button class="btn-primary" id="btn-save-config">Zapisz i zrestartuj</button>
+    </div>
+  </div>
+</div>
+
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, doc, setDoc, getDocs, orderBy, query, limit }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// ── CONFIG ──────────────────────────────────────────────
+function getFirebaseConfig() {
+  try { return JSON.parse(localStorage.getItem('hrv_firebase_cfg') || '{}'); } catch { return {}; }
+}
+function getAnthropicKey() { return localStorage.getItem('hrv_anthropic_key') || ''; }
+
+function openConfig() {
+  const saved = localStorage.getItem('hrv_firebase_cfg');
+  if (saved) document.getElementById('cfg-firebase').value = saved;
+  const ak = localStorage.getItem('hrv_anthropic_key');
+  if (ak) document.getElementById('cfg-anthropic').value = ak;
+  document.getElementById('config-modal').classList.add('visible');
+}
+function closeConfig() { document.getElementById('config-modal').classList.remove('visible'); }
+function saveConfig() {
+  const fbRaw = document.getElementById('cfg-firebase').value.trim();
+  const ak = document.getElementById('cfg-anthropic').value.trim();
+  try { JSON.parse(fbRaw); } catch { alert('Nieprawidłowy JSON konfiguracji Firebase.'); return; }
+  localStorage.setItem('hrv_firebase_cfg', fbRaw);
+  if (ak) localStorage.setItem('hrv_anthropic_key', ak);
+  location.reload();
+}
+
+// ── INIT ────────────────────────────────────────────────
+const fbCfg = getFirebaseConfig();
+let app, auth, db, currentUser;
+
+if (fbCfg.apiKey) {
+  app = initializeApp(fbCfg);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} else {
+  document.getElementById('login-screen').innerHTML = `
+    <div class="login-title">Skonfiguruj <em>Firebase</em></div>
+    <div class="login-sub" style="max-width:400px;text-align:center;line-height:1.8;color:var(--text2);">
+      Przed pierwszym użyciem podaj dane Firebase i klucz Anthropic.
+    </div>
+    <button class="btn-google" id="btn-open-config-alt" style="border-color:var(--green);color:var(--green);">
+      ⚙ Otwórz konfigurację
+    </button>
+  `;
+  document.getElementById('btn-open-config-alt')?.addEventListener('click', openConfig);
+}
+
+// ── AUTH ────────────────────────────────────────────────
+async function signIn() {
+  if (!auth) { openConfig(); return; }
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  } catch(e) { console.error(e); alert('Błąd logowania: ' + e.message); }
+}
+
+async function doSignOut() { await fbSignOut(auth); location.reload(); }
+
+if (auth) {
+  onAuthStateChanged(auth, async user => {
+    if (user) {
+      currentUser = user;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      document.getElementById('user-name').textContent = user.displayName || user.email;
+      await loadAllSessions();
+    } else {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+    }
+  });
+}
+
+// ── WIRE UP ALL EVENT LISTENERS ─────────────────────────
+document.getElementById('btn-signin')?.addEventListener('click', signIn);
+document.getElementById('btn-upload')?.addEventListener('click', () => {
+  document.getElementById('upload-zone').classList.toggle('visible');
+});
+document.getElementById('btn-config')?.addEventListener('click', openConfig);
+document.getElementById('btn-logout')?.addEventListener('click', doSignOut);
+document.getElementById('btn-cancel-config')?.addEventListener('click', closeConfig);
+document.getElementById('btn-save-config')?.addEventListener('click', saveConfig);
+document.getElementById('file-input')?.addEventListener('change', e => handleFiles(e.target.files));
+document.getElementById('upload-zone')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget || e.target.classList.contains('upload-icon') ||
+      e.target.classList.contains('upload-title') || e.target.classList.contains('upload-sub')) {
+    document.getElementById('file-input').click();
+  }
+});
+
+// ── UPLOAD ──────────────────────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+
+async function handleFiles(files) {
+  const progress = document.getElementById('upload-progress');
+  progress.classList.add('visible');
+  progress.innerHTML = '<div class="spinner"></div> Odczytuję pliki...';
+
+  const fileMap = {};
+  for (const f of files) {
+    const name = f.name.toLowerCase();
+    if (name.includes('features')) fileMap.features = f;
+    else if (name.includes('kubios')) fileMap.kubios = f;
+    else if (name.includes('hr_')) fileMap.hr = f;
+    else if (name.includes('rr_') && !name.includes('kubios')) fileMap.rr = f;
+  }
+
+  const missing = [];
+  if (!fileMap.features) missing.push('Features_.csv');
+  if (!fileMap.kubios) missing.push('RR_KUBIOS_.txt');
+  if (missing.length) {
+    progress.innerHTML = `<span class="progress-err">✗ Brak plików: ${missing.join(', ')}</span>`;
+    return;
+  }
+
+  try {
+    progress.innerHTML = '⟳ Parsowanie Features CSV...';
+    const featuresText = await readFile(fileMap.features);
+    const features = parseFeaturesCsv(featuresText);
+
+    progress.innerHTML += '<br>⟳ Parsowanie KUBIOS RR...';
+    const kubiosText = await readFile(fileMap.kubios);
+    const rrIntervals = parseKubios(kubiosText);
+
+    const sessionDate = extractDate(fileMap.features.name);
+    const summary = computeSummary(features);
+
+    progress.innerHTML += '<br>⟳ Zapisuję do Firestore...';
+    const sessionRef = doc(db, 'users', currentUser.uid, 'sessions', sessionDate);
+    await setDoc(sessionRef, {
+      date: sessionDate,
+      uploaded_at: new Date().toISOString(),
+      features,
+      rr_intervals: rrIntervals,
+      summary
+    });
+
+    progress.innerHTML = `<span class="progress-ok">✓ Sesja ${sessionDate} zapisana pomyślnie!</span>`;
+    zone.classList.remove('visible');
+    await loadAllSessions();
+  } catch(e) {
+    console.error(e);
+    progress.innerHTML = `<span class="progress-err">✗ Błąd: ${e.message}</span>`;
+  }
+};
+
+function readFile(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsText(f);
+  });
+}
+
+function extractDate(filename) {
+  const m = filename.match(/(\d{4}-\d{1,2}-\d{1,2})/);
+  if (m) {
+    const parts = m[1].split('-');
+    return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+  }
+  return new Date().toISOString().split('T')[0];
+}
+
+function parseFeaturesCsv(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(',');
+    const obj = {};
+    headers.forEach((h, idx) => {
+      const v = vals[idx]?.trim();
+      obj[h] = isNaN(v) || v === '' ? v : parseFloat(v);
+    });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function parseKubios(text) {
+  return text.trim().split('\n')
+    .map(l => parseInt(l.trim()))
+    .filter(n => !isNaN(n) && n > 200 && n < 2500);
+}
+
+function computeSummary(features) {
+  if (!features.length) return {};
+  const get = key => features.map(r => r[key]).filter(v => typeof v === 'number' && !isNaN(v));
+  const avg = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null;
+
+  // Detect morning vs evening by parsing date field
+  const withTime = features.map(r => {
+    const d = new Date(r.date || r[' date'] || r['date']);
+    return { ...r, hour: d.getUTCHours() };
+  });
+  const morning = withTime.filter(r => r.hour < 12);
+  const evening = withTime.filter(r => r.hour >= 12);
+  const pick = arr => arr.length ? arr : withTime;
+
+  return {
+    rmssd: avg(get('rMSSD')),
+    sdnn: avg(get('SDNN')),
+    hr: avg(get('heart_rate')),
+    lfhf: avg(get('LFHF')),
+    alpha1: avg(get('alpha1')),
+    avnn: avg(get('AVNN')),
+    pnn50: avg(get('pNN50')),
+    morning_rmssd: avg(pick(morning).map(r => r['rMSSD']).filter(v => v != null && !isNaN(v))),
+    evening_rmssd: avg(pick(evening).map(r => r['rMSSD']).filter(v => v != null && !isNaN(v))),
+    morning_hr: avg(pick(morning).map(r => r['heart_rate']).filter(v => v != null && !isNaN(v))),
+    evening_hr: avg(pick(evening).map(r => r['heart_rate']).filter(v => v != null && !isNaN(v))),
+    n_windows: features.length
+  };
+}
+
+// ── LOAD & DISPLAY ───────────────────────────────────────
+let allSessions = [];
+let activeDate = null;
+let chartInstances = {};
+
+async function loadAllSessions() {
+  if (!currentUser || !db) return;
+  const q = query(collection(db, 'users', currentUser.uid, 'sessions'), orderBy('date', 'desc'), limit(60));
+  const snap = await getDocs(q);
+  allSessions = snap.docs.map(d => d.data()).sort((a,b) => a.date > b.date ? 1 : -1);
+
+  if (!allSessions.length) {
+    document.getElementById('empty-state').classList.add('visible');
+    return;
+  }
+
+  document.getElementById('empty-state').classList.remove('visible');
+  renderDateButtons();
+  renderHistory();
+  renderTrendCharts();
+
+  const latest = allSessions[allSessions.length - 1];
+  selectDate(latest.date);
+}
+
+function renderDateButtons() {
+  const container = document.getElementById('date-buttons');
+  const last7 = allSessions.slice(-7);
+  container.innerHTML = last7.map(s => `
+    <button class="date-btn" data-date="${s.date}">${formatDate(s.date)}</button>
+  `).join('');
+  container.addEventListener('click', e => {
+    const btn = e.target.closest('.date-btn');
+    if (btn) selectDate(btn.dataset.date);
+  });
+  document.getElementById('date-row').style.display = 'flex';
+}
+
+function selectDate(date) {
+  activeDate = date;
+  document.querySelectorAll('.date-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.date === date);
+  });
+  const session = allSessions.find(s => s.date === date);
+  if (session) renderSession(session);
+};
+
+function formatDate(d) {
+  const dt = new Date(d + 'T12:00:00Z');
+  return dt.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+}
+
+function getBaseline(upToDate) {
+  const prev = allSessions.filter(s => s.date < upToDate).slice(-7);
+  if (prev.length < 3) return null;
+  const avg = arr => arr.reduce((a,b) => a+b, 0) / arr.length;
+  return {
+    rmssd: avg(prev.map(s => s.summary?.rmssd).filter(Boolean)),
+    hr: avg(prev.map(s => s.summary?.hr).filter(Boolean)),
+    sdnn: avg(prev.map(s => s.summary?.sdnn).filter(Boolean)),
+    alpha1: avg(prev.map(s => s.summary?.alpha1).filter(Boolean)),
+    n: prev.length
+  };
+}
+
+function renderSession(session) {
+  const s = session.summary || {};
+  const baseline = getBaseline(session.date);
+
+  // Status
+  let statusClass = 'green', statusText = 'Stan układu nerwowego: dobry', baselineText = '';
+  let score = 0;
+
+  if (baseline) {
+    const rmssdDelta = baseline.rmssd ? (s.rmssd - baseline.rmssd) / baseline.rmssd : 0;
+    if (rmssdDelta < -0.35) score += 2;
+    else if (rmssdDelta < -0.2) score += 1;
+    baselineText = `vs baseline (${baseline.n} dni): rMSSD ${rmssdDelta >= 0 ? '+' : ''}${(rmssdDelta * 100).toFixed(0)}%`;
+  }
+
+  if (s.lfhf > 2.0) score += 1;
+  if (s.hr > 75) score += 1;
+
+  if (score >= 3) { statusClass = 'red'; statusText = 'Przeciążenie układu nerwowego'; }
+  else if (score >= 1) { statusClass = 'amber'; statusText = 'Podwyższone napięcie — uważaj'; }
+
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot ' + statusClass;
+  document.getElementById('status-text').textContent = statusText;
+  document.getElementById('status-baseline').textContent = baselineText;
+  document.getElementById('status-bar').style.display = 'flex';
+
+  // Metrics
+  const renderDelta = (val, base, lowerIsBetter = false) => {
+    if (!base || val == null) return '';
+    const d = (val - base) / base;
+    const pct = (d * 100).toFixed(0);
+    const good = lowerIsBetter ? d < -0.1 : d > 0.1;
+    const bad = lowerIsBetter ? d > 0.1 : d < -0.1;
+    const cls = good ? 'delta-down' : bad ? 'delta-up' : 'delta-neutral';
+    const arrow = d > 0 ? '↑' : '↓';
+    return `<div class="metric-delta"><span class="${cls}">${arrow} ${Math.abs(pct)}% vs baseline</span></div>`;
+  };
+
+  const cellClass = (val, base, lowerIsBetter = false) => {
+    if (!base || val == null) return '';
+    const d = (val - base) / base;
+    if (lowerIsBetter) return d < -0.15 ? 'good' : d > 0.15 ? 'bad' : 'warn';
+    return d > 0.15 ? 'good' : d < -0.15 ? 'bad' : 'warn';
+  };
+
+  const fmt = (v, dec=1) => v != null ? v.toFixed(dec) : '—';
+
+  document.getElementById('metrics-grid').innerHTML = `
+    <div class="metric-cell ${baseline ? cellClass(s.rmssd, baseline?.rmssd) : ''}">
+      <div class="metric-label">rMSSD</div>
+      <div class="metric-value">${fmt(s.rmssd)} <span class="metric-unit">ms</span></div>
+      ${baseline ? renderDelta(s.rmssd, baseline?.rmssd) : '<div class="metric-delta"><span class="delta-neutral">↗ parasympatyczny</span></div>'}
+    </div>
+    <div class="metric-cell ${baseline ? cellClass(s.sdnn, baseline?.sdnn) : ''}">
+      <div class="metric-label">SDNN</div>
+      <div class="metric-value">${fmt(s.sdnn)} <span class="metric-unit">ms</span></div>
+      ${baseline ? renderDelta(s.sdnn, baseline?.sdnn) : '<div class="metric-delta"><span class="delta-neutral">↗ ogólna zmienność</span></div>'}
+    </div>
+    <div class="metric-cell ${baseline ? cellClass(s.hr, baseline?.hr, true) : ''}">
+      <div class="metric-label">HR śr.</div>
+      <div class="metric-value">${fmt(s.hr, 0)} <span class="metric-unit">bpm</span></div>
+      ${baseline ? renderDelta(s.hr, baseline?.hr, true) : '<div class="metric-delta"><span class="delta-neutral">↗ rytm serca</span></div>'}
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">LF/HF</div>
+      <div class="metric-value ${s.lfhf > 2 ? 'bad' : s.lfhf > 1.5 ? 'warn' : 'good'}">${fmt(s.lfhf, 2)}</div>
+      <div class="metric-delta"><span class="${s.lfhf > 2 ? 'delta-up' : s.lfhf < 1 ? 'delta-down' : 'delta-neutral'}">${s.lfhf > 2 ? '↑ współczulny' : s.lfhf < 1 ? '↓ przywspółczulny' : '≈ równowaga'}</span></div>
+    </div>
+    <div class="metric-cell ${baseline ? cellClass(s.alpha1, baseline?.alpha1) : ''}">
+      <div class="metric-label">DFA alpha1</div>
+      <div class="metric-value ${s.alpha1 > 1.5 ? 'bad' : s.alpha1 < 1.05 ? 'good' : ''}">${fmt(s.alpha1, 2)}</div>
+      <div class="metric-delta"><span class="delta-neutral">${s.alpha1 < 1.0 ? '≈ stan relaksu' : s.alpha1 > 1.5 ? '↑ stres/obciążenie' : '≈ umiarkowane'}</span></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">AVNN</div>
+      <div class="metric-value">${fmt(s.avnn, 0)} <span class="metric-unit">ms</span></div>
+      <div class="metric-delta"><span class="delta-neutral">średni R-R</span></div>
+    </div>
+  `;
+  document.getElementById('metrics-grid').style.display = 'grid';
+
+  // Session timeline chart
+  renderSessionChart(session);
+
+  // Interpretation
+  renderInterpretation(session, baseline, score, statusClass);
+
+  document.getElementById('charts-grid').style.display = 'grid';
+}
+
+function renderSessionChart(session) {
+  const features = session.features || [];
+  if (!features.length) return;
+
+  const labels = features.map((_, i) => (i * 2) + ' min');
+  const rmssd = features.map(r => r['rMSSD'] ?? null);
+  const lfhf = features.map(r => r['LFHF'] ?? null);
+
+  destroyChart('chart-session-rmssd');
+  destroyChart('chart-lfhf');
+
+  new Chart(document.getElementById('chart-session-rmssd'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'rMSSD',
+        data: rmssd,
+        borderColor: '#00e87a',
+        backgroundColor: 'rgba(0,232,122,0.06)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        borderWidth: 1.5
+      }]
+    },
+    options: chartOpts('ms')
+  });
+
+  new Chart(document.getElementById('chart-lfhf'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'LF/HF',
+        data: lfhf,
+        borderColor: '#4d9fff',
+        backgroundColor: 'rgba(77,159,255,0.06)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        borderWidth: 1.5
+      }]
+    },
+    options: chartOpts('')
+  });
+}
+
+function renderTrendCharts() {
+  const dates = allSessions.map(s => formatDate(s.date));
+  const rmssd = allSessions.map(s => s.summary?.rmssd ?? null);
+  const hr = allSessions.map(s => s.summary?.hr ?? null);
+  const alpha1 = allSessions.map(s => s.summary?.alpha1 ?? null);
+
+  // Baseline overlay
+  const baselineRmssd = allSessions.map((s, i) => {
+    const prev = allSessions.slice(Math.max(0, i-7), i);
+    if (prev.length < 3) return null;
+    return prev.reduce((a, p) => a + (p.summary?.rmssd || 0), 0) / prev.length;
+  });
+
+  document.getElementById('rmssd-baseline-label').textContent =
+    allSessions.length >= 3 ? `(linia przerywana = rolling 7d avg)` : `(baseline pojawi się po 3+ sesjach)`;
+
+  destroyChart('chart-rmssd');
+  destroyChart('chart-hr');
+  destroyChart('chart-alpha1');
+
+  new Chart(document.getElementById('chart-rmssd'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          label: 'rMSSD',
+          data: rmssd,
+          borderColor: '#00e87a',
+          backgroundColor: 'rgba(0,232,122,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#00e87a',
+          borderWidth: 2
+        },
+        {
+          label: 'Baseline 7d',
+          data: baselineRmssd,
+          borderColor: 'rgba(0,232,122,0.35)',
+          borderDash: [4, 4],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 1
+        }
+      ]
+    },
+    options: chartOpts('ms', true)
+  });
+
+  new Chart(document.getElementById('chart-hr'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        label: 'HR',
+        data: hr,
+        borderColor: '#ff6b6b',
+        backgroundColor: 'rgba(255,107,107,0.06)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#ff6b6b',
+        borderWidth: 1.5
+      }]
+    },
+    options: chartOpts('bpm', true)
+  });
+
+  new Chart(document.getElementById('chart-alpha1'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        label: 'alpha1',
+        data: alpha1,
+        borderColor: '#ffc947',
+        backgroundColor: 'rgba(255,201,71,0.06)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#ffc947',
+        borderWidth: 1.5
+      }]
+    },
+    options: chartOpts('', true)
+  });
+}
+
+function chartOpts(unit, showLegend = false) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: showLegend, labels: { color: '#888899', font: { family: 'DM Mono', size: 11 }, boxWidth: 12, padding: 12 } },
+      tooltip: {
+        backgroundColor: '#1a1a24',
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 0.5,
+        titleColor: '#888899',
+        bodyColor: '#e8e8f0',
+        callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(2)} ${unit}` }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#555566', font: { family: 'DM Mono', size: 10 }, maxTicksLimit: 10 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.07)' } },
+      y: { ticks: { color: '#555566', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.07)' } }
+    }
+  };
+}
+
+function destroyChart(id) {
+  const existing = Chart.getChart(id);
+  if (existing) existing.destroy();
+}
+
+function renderHistory() {
+  const tbody = document.getElementById('history-body');
+  if (!allSessions.length) { tbody.innerHTML = '<tr><td colspan="7" class="no-sessions">Brak sesji</td></tr>'; return; }
+
+  const rows = [...allSessions].reverse().map(s => {
+    const sm = s.summary || {};
+    const baseline = getBaseline(s.date);
+    let deltaClass = '', delta = '—';
+    if (baseline?.rmssd && sm.rmssd) {
+      const d = (sm.rmssd - baseline.rmssd) / baseline.rmssd * 100;
+      delta = (d >= 0 ? '+' : '') + d.toFixed(0) + '%';
+      deltaClass = d > 10 ? 'td-good' : d < -20 ? 'td-bad' : 'td-warn';
+    }
+    return `<tr data-date="${s.date}">
+      <td>${formatDate(s.date)} <span style="color:var(--text3);font-size:11px;">${s.date}</span></td>
+      <td>${sm.rmssd?.toFixed(1) ?? '—'}</td>
+      <td>${sm.hr?.toFixed(0) ?? '—'}</td>
+      <td>${sm.sdnn?.toFixed(1) ?? '—'}</td>
+      <td>${sm.lfhf?.toFixed(2) ?? '—'}</td>
+      <td>${sm.alpha1?.toFixed(2) ?? '—'}</td>
+      <td class="${deltaClass}">${delta}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+  tbody.addEventListener('click', e => {
+    const row = e.target.closest('tr[data-date]');
+    if (row) selectDate(row.dataset.date);
+  });
+  document.getElementById('history-panel').style.display = 'block';
+}
+
+// ── INTERPRETATION (Claude API) ─────────────────────────
+async function renderInterpretation(session, baseline, score, statusClass) {
+  const box = document.getElementById('interp-box');
+  const tag = document.getElementById('interp-tag');
+  const text = document.getElementById('interp-text');
+  const dateEl = document.getElementById('interp-date');
+
+  box.className = 'interpretation-box ' + statusClass;
+  box.style.display = 'block';
+  tag.className = 'interp-tag ' + statusClass;
+  tag.textContent = statusClass === 'green' ? 'Dobry stan' : statusClass === 'amber' ? 'Uważaj' : 'Przeciążenie';
+  dateEl.textContent = session.date;
+  text.className = 'interp-text loading';
+  text.textContent = 'Analizuję dane...';
+
+  const apiKey = getAnthropicKey();
+  if (!apiKey) {
+    text.className = 'interp-text';
+    text.textContent = generateLocalInterpretation(session.summary, baseline, score);
+    return;
+  }
+
+  const s = session.summary;
+  const bLine = baseline ? `Baseline (${baseline.n} dni): rMSSD ${baseline.rmssd?.toFixed(1)} ms, HR ${baseline.hr?.toFixed(0)} bpm, SDNN ${baseline.sdnn?.toFixed(1)} ms` : 'Brak wystarczającej historii do wyliczenia baseline (minimum 3 sesje).';
+  const rmssdDelta = baseline?.rmssd ? ((s.rmssd - baseline.rmssd) / baseline.rmssd * 100).toFixed(0) : null;
+
+  const prompt = `Jesteś ekspertem od HRV i fizjologii wysiłku. Zinterpretuj dane sesji pomiarowej układu nerwowego. Odpowiedz po polsku, 3-5 zdań, konkretnie i bez owijania w bawełnę. Nie zaczynaj od "Na podstawie". Mów bezpośrednio do osoby.
+
+Dane sesji (${session.date}):
+- rMSSD: ${s.rmssd?.toFixed(1)} ms ${rmssdDelta ? `(${rmssdDelta >= 0 ? '+' : ''}${rmssdDelta}% vs baseline)` : ''}
+- SDNN: ${s.sdnn?.toFixed(1)} ms
+- HR śr.: ${s.hr?.toFixed(0)} bpm
+- LF/HF: ${s.lfhf?.toFixed(2)} (>2 = dominacja współczulna, <1 = przywspółczulna)
+- DFA alpha1: ${s.alpha1?.toFixed(2)} (>1.5 = stres/obciążenie, ~1.0 = relaks)
+- pNN50: ${s.pnn50?.toFixed(1)}%
+${bLine}
+
+Oceń: stan OUN (układ współczulny vs przywspółczulny), poziom stresu obwodowego, zdolność regeneracyjną, i czy potrzeba odpoczynku czy można trenować.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    text.className = 'interp-text fade-in';
+    text.textContent = data.content?.[0]?.text || generateLocalInterpretation(s, baseline, score);
+  } catch(e) {
+    text.className = 'interp-text';
+    text.textContent = generateLocalInterpretation(s, baseline, score);
+  }
+}
+
+function generateLocalInterpretation(s, baseline, score) {
+  if (!s) return 'Brak danych do interpretacji.';
+  const rmssdDelta = baseline?.rmssd ? (s.rmssd - baseline.rmssd) / baseline.rmssd : null;
+
+  const parts = [];
+  if (rmssdDelta !== null) {
+    if (rmssdDelta < -0.35) parts.push(`rMSSD jest ${Math.abs((rmssdDelta*100).toFixed(0))}% poniżej Twojego baseline — to wyraźny sygnał przeciążenia układu nerwowego.`);
+    else if (rmssdDelta < -0.2) parts.push(`rMSSD jest ${Math.abs((rmssdDelta*100).toFixed(0))}% poniżej baseline — układ nerwowy jest pod presją.`);
+    else if (rmssdDelta > 0.15) parts.push(`rMSSD powyżej baseline — dobra regeneracja.`);
+    else parts.push(`rMSSD w okolicach Twojego baseline.`);
+  } else {
+    if (s.rmssd < 20) parts.push('Bardzo niskie rMSSD — silna dominacja układu współczulnego.');
+    else if (s.rmssd < 35) parts.push('Obniżone rMSSD — układ nerwowy pod presją.');
+    else parts.push('rMSSD w akceptowalnym zakresie.');
+  }
+
+  if (s.lfhf > 2.0) parts.push('LF/HF powyżej 2.0 — wyraźna dominacja współczulna, ciało w trybie gotowości.');
+  else if (s.lfhf < 1.0) parts.push('LF/HF poniżej 1.0 — dobra aktywacja przywspółczulna.');
+
+  if (s.alpha1 > 1.5) parts.push('DFA alpha1 powyżej 1.5 wskazuje na przeciążenie i ograniczoną adaptację.');
+  else if (s.alpha1 < 1.1) parts.push('DFA alpha1 bliski 1.0 — układ nerwowy elastyczny.');
+
+  if (score >= 3) parts.push('Nie trenuj intensywnie. Priorytet: sen i spokój.');
+  else if (score >= 1) parts.push('Lekki ruch w porządku, bez intensywności.');
+  else parts.push('Możesz trenować normalnie.');
+
+  return parts.join(' ');
+}
+</script>
+</body>
+</html>
