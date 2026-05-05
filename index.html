@@ -853,15 +853,23 @@ function extractDate(filename) {
 function parseFeaturesCsv(text) {
   const lines = text.trim().split(/\r\n|\r|\n/).filter(l => l.trim());
   console.log('LINES COUNT:', lines.length, 'LINE1:', lines[1]?.substring(0, 80));
-  // Split by ', ' (comma+space) - this CSV uses ', ' as separator
-  // which correctly handles datetime fields containing spaces
-  const headers = lines[0].split(', ').map(h => h.trim());
+
+  // Parse header - split by comma, trim each
+  const headers = lines[0].split(',').map(h => h.trim());
+  const numCols = headers.length;
   const rows = [];
+
   for (let i = 1; i < lines.length; i++) {
-    const vals = lines[i].split(', ');
+    // Split by comma first
+    const raw = lines[i].split(',').map(s => s.trim());
+
+    // The date field is "YYYY-MM-DD HH:MM:SS +ZZZZ" which contains spaces
+    // but no commas, so it stays as one token. However timestamp "HH:MM:SS"
+    // also has no commas. So raw split by comma gives correct field count.
+    // Just need to handle case where we get exactly numCols tokens.
     const obj = {};
     headers.forEach((h, colIdx) => {
-      const v = vals[colIdx]?.trim() ?? '';
+      const v = raw[colIdx] ?? '';
       obj[h] = (v === '' || isNaN(v)) ? v : parseFloat(v);
     });
     rows.push(obj);
@@ -1277,8 +1285,8 @@ function renderHistory() {
   document.getElementById('history-panel').style.display = 'block';
 }
 
-// ── INTERPRETATION (Claude API) ─────────────────────────
-async function renderInterpretation(session, baseline, score, statusClass) {
+// ── INTERPRETATION ──────────────────────────────────────
+function renderInterpretation(session, baseline, score, statusClass) {
   const box = document.getElementById('interp-box');
   const tag = document.getElementById('interp-tag');
   const text = document.getElementById('interp-text');
@@ -1289,77 +1297,62 @@ async function renderInterpretation(session, baseline, score, statusClass) {
   tag.className = 'interp-tag ' + statusClass;
   tag.textContent = statusClass === 'green' ? 'Dobry stan' : statusClass === 'amber' ? 'Uważaj' : 'Przeciążenie';
   dateEl.textContent = session.date;
-  text.className = 'interp-text loading';
-  text.textContent = 'Analizuję dane...';
-
-  const apiKey = getAnthropicKey();
-  if (!apiKey) {
-    text.className = 'interp-text';
-    text.textContent = generateLocalInterpretation(session.summary, baseline, score);
-    return;
-  }
-
-  const s = session.summary;
-  const bLine = baseline ? `Baseline (${baseline.n} dni): rMSSD ${baseline.rmssd?.toFixed(1)} ms, HR ${baseline.hr?.toFixed(0)} bpm, SDNN ${baseline.sdnn?.toFixed(1)} ms` : 'Brak wystarczającej historii do wyliczenia baseline (minimum 3 sesje).';
-  const rmssdDelta = baseline?.rmssd ? ((s.rmssd - baseline.rmssd) / baseline.rmssd * 100).toFixed(0) : null;
-
-  const prompt = `Jesteś ekspertem od HRV i fizjologii wysiłku. Zinterpretuj dane sesji pomiarowej układu nerwowego. Odpowiedz po polsku, 3-5 zdań, konkretnie i bez owijania w bawełnę. Nie zaczynaj od "Na podstawie". Mów bezpośrednio do osoby.
-
-Dane sesji (${session.date}):
-- rMSSD: ${s.rmssd?.toFixed(1)} ms ${rmssdDelta ? `(${rmssdDelta >= 0 ? '+' : ''}${rmssdDelta}% vs baseline)` : ''}
-- SDNN: ${s.sdnn?.toFixed(1)} ms
-- HR śr.: ${s.hr?.toFixed(0)} bpm
-- LF/HF: ${s.lfhf?.toFixed(2)} (>2 = dominacja współczulna, <1 = przywspółczulna)
-- DFA alpha1: ${s.alpha1?.toFixed(2)} (>1.5 = stres/obciążenie, ~1.0 = relaks)
-- pNN50: ${s.pnn50?.toFixed(1)}%
-${bLine}
-
-Oceń: stan OUN (układ współczulny vs przywspółczulny), poziom stresu obwodowego, zdolność regeneracyjną, i czy potrzeba odpoczynku czy można trenować.`;
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await resp.json();
-    text.className = 'interp-text fade-in';
-    text.textContent = data.content?.[0]?.text || generateLocalInterpretation(s, baseline, score);
-  } catch(e) {
-    text.className = 'interp-text';
-    text.textContent = generateLocalInterpretation(s, baseline, score);
-  }
+  text.className = 'interp-text fade-in';
+  text.textContent = generateLocalInterpretation(session.summary, baseline, score);
 }
 
 function generateLocalInterpretation(s, baseline, score) {
-  if (!s) return 'Brak danych do interpretacji.';
-  const rmssdDelta = baseline?.rmssd ? (s.rmssd - baseline.rmssd) / baseline.rmssd : null;
+  if (!s || s.rmssd == null) return 'Brak danych do interpretacji.';
 
+  const rmssdDelta = baseline?.rmssd ? (s.rmssd - baseline.rmssd) / baseline.rmssd : null;
   const parts = [];
+
+  // 1. rMSSD - główny wskaźnik
   if (rmssdDelta !== null) {
-    if (rmssdDelta < -0.35) parts.push(`rMSSD jest ${Math.abs((rmssdDelta*100).toFixed(0))}% poniżej Twojego baseline — to wyraźny sygnał przeciążenia układu nerwowego.`);
-    else if (rmssdDelta < -0.2) parts.push(`rMSSD jest ${Math.abs((rmssdDelta*100).toFixed(0))}% poniżej baseline — układ nerwowy jest pod presją.`);
-    else if (rmssdDelta > 0.15) parts.push(`rMSSD powyżej baseline — dobra regeneracja.`);
-    else parts.push(`rMSSD w okolicach Twojego baseline.`);
+    const pct = Math.abs((rmssdDelta * 100).toFixed(0));
+    if (rmssdDelta < -0.35)
+      parts.push(`rMSSD jest ${pct}% poniżej Twojego baseline — wyraźny sygnał przeciążenia układu nerwowego.`);
+    else if (rmssdDelta < -0.2)
+      parts.push(`rMSSD o ${pct}% poniżej baseline — układ nerwowy pod presją.`);
+    else if (rmssdDelta < -0.1)
+      parts.push(`rMSSD lekko poniżej baseline (${pct}%) — umiarkowane zmęczenie.`);
+    else if (rmssdDelta > 0.15)
+      parts.push(`rMSSD o ${pct}% powyżej baseline — dobra regeneracja.`);
+    else
+      parts.push(`rMSSD w okolicach Twojego baseline — stan stabilny.`);
   } else {
     if (s.rmssd < 20) parts.push('Bardzo niskie rMSSD — silna dominacja układu współczulnego.');
-    else if (s.rmssd < 35) parts.push('Obniżone rMSSD — układ nerwowy pod presją.');
-    else parts.push('rMSSD w akceptowalnym zakresie.');
+    else if (s.rmssd < 30) parts.push('Obniżone rMSSD — układ nerwowy pod presją.');
+    else if (s.rmssd < 45) parts.push('rMSSD w umiarkowanym zakresie.');
+    else parts.push('Dobre rMSSD — aktywny układ przywspółczulny.');
   }
 
-  if (s.lfhf > 2.0) parts.push('LF/HF powyżej 2.0 — wyraźna dominacja współczulna, ciało w trybie gotowości.');
-  else if (s.lfhf < 1.0) parts.push('LF/HF poniżej 1.0 — dobra aktywacja przywspółczulna.');
+  // 2. LF/HF - balans
+  if (s.lfhf != null) {
+    if (s.lfhf > 2.5) parts.push('LF/HF mocno powyżej 2.0 — silna dominacja współczulna, ciało w trybie pobudzenia.');
+    else if (s.lfhf > 1.8) parts.push('LF/HF podwyższone — układ współczulny aktywny.');
+    else if (s.lfhf < 0.8) parts.push('LF/HF poniżej 1.0 — wyraźna aktywacja przywspółczulna, dobry relaks.');
+    else if (s.lfhf < 1.2) parts.push('LF/HF w zakresie równowagi — dobry balans układu nerwowego.');
+  }
 
-  if (s.alpha1 > 1.5) parts.push('DFA alpha1 powyżej 1.5 wskazuje na przeciążenie i ograniczoną adaptację.');
-  else if (s.alpha1 < 1.1) parts.push('DFA alpha1 bliski 1.0 — układ nerwowy elastyczny.');
+  // 3. DFA alpha1
+  if (s.alpha1 != null) {
+    if (s.alpha1 > 1.5) parts.push('DFA alpha1 powyżej 1.5 — ograniczona elastyczność układu nerwowego, sygnał obciążenia.');
+    else if (s.alpha1 > 1.2) parts.push('DFA alpha1 umiarkowanie podwyższone.');
+    else if (s.alpha1 < 1.05) parts.push('DFA alpha1 bliski 1.0 — układ nerwowy elastyczny i dobrze zregenerowany.');
+  }
 
-  if (score >= 3) parts.push('Nie trenuj intensywnie. Priorytet: sen i spokój.');
-  else if (score >= 1) parts.push('Lekki ruch w porządku, bez intensywności.');
-  else parts.push('Możesz trenować normalnie.');
+  // 4. SDNN kontekst
+  if (s.sdnn != null) {
+    if (s.sdnn < 30) parts.push('SDNN bardzo niskie — globalna zmienność serca mocno ograniczona.');
+    else if (s.sdnn > 80) parts.push('SDNN wysokie — dobra ogólna zmienność rytmu serca.');
+  }
+
+  // 5. Zalecenie
+  if (score >= 3) parts.push('Dziś odpoczynek — bez intensywnego treningu. Priorytet: sen i spokój.');
+  else if (score >= 2) parts.push('Unikaj intensywności. Spacer lub bardzo lekki ruch w porządku.');
+  else if (score >= 1) parts.push('Możesz trenować, ale obserwuj reakcję — nie forsuj.');
+  else parts.push('Układ nerwowy gotowy. Możesz trenować normalnie.');
 
   return parts.join(' ');
 }
