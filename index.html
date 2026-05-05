@@ -851,7 +851,8 @@ function extractDate(filename) {
 }
 
 function parseFeaturesCsv(text) {
-  const lines = text.trim().split('\n').filter(l => l.trim());
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+console.log('LINES COUNT:', lines.length, 'LINE1:', lines[1]?.substring(0, 50));
   // Split by ', ' (comma+space) - this CSV uses ', ' as separator
   // which correctly handles datetime fields containing spaces
   const headers = lines[0].split(', ').map(h => h.trim());
