@@ -809,21 +809,23 @@ async function handleFiles(files) {
     const rrIntervals = parseKubios(kubiosText);
     console.log('DEBUG rrIntervals count:', rrIntervals.length, 'first 5:', rrIntervals.slice(0,5));
 
-    const sessionDate = extractDate(fileMap.features.name);
+    const sessionId = extractSessionId(features);
+    const sessionDate = sessionIdToDate(sessionId);
     const summary = computeSummary(features);
     console.log('DEBUG summary:', JSON.stringify(summary));
 
     progress.innerHTML += '<br>⟳ Zapisuję do Firestore...';
-    const sessionRef = doc(db, 'users', currentUser.uid, 'sessions', sessionDate);
+    const sessionRef = doc(db, 'users', currentUser.uid, 'sessions', sessionId);
     await setDoc(sessionRef, {
       date: sessionDate,
+      session_id: sessionId,
       uploaded_at: new Date().toISOString(),
       features,
       rr_intervals: rrIntervals,
       summary
     });
 
-    progress.innerHTML = `<span class="progress-ok">✓ Sesja ${sessionDate} zapisana pomyślnie!</span>`;
+    progress.innerHTML = `<span class="progress-ok">✓ Sesja ${sessionDate} ${sessionId.slice(11).replace('-',':')} zapisana!</span>`;
     zone.classList.remove('visible');
     await loadAllSessions();
   } catch(e) {
@@ -848,6 +850,23 @@ function extractDate(filename) {
     return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
   }
   return new Date().toISOString().split('T')[0];
+}
+
+function extractSessionId(features) {
+  // Use first timestamp from data as unique session ID: YYYY-MM-DD_HH-MM
+  // This allows multiple sessions per day
+  if (!features || !features.length) return new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  const dateStr = features[0]?.date || features[0]?.['date'] || '';
+  if (!dateStr) return new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  // Parse "2026-05-05 10:25:40 +0000"
+  const m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}_${m[4]}-${m[5]}`;
+  return dateStr.slice(0,10) + '_00-00';
+}
+
+function sessionIdToDate(sessionId) {
+  // Extract just the date part from session ID
+  return sessionId.slice(0, 10);
 }
 
 function parseFeaturesCsv(text) {
@@ -980,12 +999,21 @@ function selectDate(date) {
 };
 
 function formatDate(d) {
-  const dt = new Date(d + 'T12:00:00Z');
-  return dt.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+  // d can be "YYYY-MM-DD" or "YYYY-MM-DD_HH-MM"
+  const hasTime = d.includes('_');
+  const datePart = d.slice(0, 10);
+  const dt = new Date(datePart + 'T12:00:00Z');
+  const dateLabel = dt.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+  if (hasTime) {
+    const timePart = d.slice(11).replace('-', ':');
+    return `${dateLabel} ${timePart}`;
+  }
+  return dateLabel;
 }
 
 function getBaseline(upToDate) {
-  const prev = allSessions.filter(s => s.date < upToDate).slice(-7);
+  const datePart = upToDate.slice(0, 10);
+  const prev = allSessions.filter(s => (s.date || '').slice(0, 10) < datePart).slice(-7);
   if (prev.length < 3) return null;
   const avg = arr => arr.reduce((a,b) => a+b, 0) / arr.length;
   return {
