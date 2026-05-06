@@ -996,24 +996,25 @@ function renderDateButtons() {
   const container = document.getElementById('date-buttons');
   const last7 = allSessions.slice(-7);
 
-  // Count how many sessions per calendar date to decide if we show time
+  // Count sessions per calendar date across ALL sessions (not just last7)
   const dateCounts = {};
-  for (const s of last7) {
-    const d = (s.session_id || s.date).slice(0, 10);
+  for (const s of allSessions) {
+    const sid = s.session_id || s.date;
+    const d = sid.slice(0, 10);
     dateCounts[d] = (dateCounts[d] || 0) + 1;
   }
 
   container.innerHTML = last7.map(s => {
     const sid = s.session_id || s.date;
     const dateOnly = sid.slice(0, 10);
-    const hasTime = sid.includes('_') && dateCounts[dateOnly] > 1;
-    const label = hasTime
-      ? formatDate(sid)
-      : formatDate(dateOnly);
+    // Always show time if there are multiple sessions on that day
+    // OR if session_id has time component
+    // Show time if session_id has time component (always better than guessing)
+    const label = sid.includes('_') ? formatDate(sid) : formatDate(dateOnly);
     return `<button class="date-btn" data-sid="${sid}">${label}</button>`;
   }).join('');
 
-  // Re-attach listener (replace old one)
+  // Re-attach listener fresh each time
   const newContainer = container.cloneNode(true);
   container.parentNode.replaceChild(newContainer, container);
   newContainer.addEventListener('click', e => {
