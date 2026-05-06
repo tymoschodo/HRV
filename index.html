@@ -866,12 +866,11 @@ function extractDate(filename) {
 }
 
 function extractSessionId(features) {
-  // Use first timestamp from data as unique session ID: YYYY-MM-DD_HH-MM
-  // This allows multiple sessions per day
+  // Use LAST timestamp as session ID - because the app exports cumulative data
+  // each new export ends at a different time, making it unique
   if (!features || !features.length) return new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
-  const dateStr = features[0]?.date || features[0]?.['date'] || '';
+  const dateStr = features[features.length - 1]?.date || '';
   if (!dateStr) return new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
-  // Parse "2026-05-05 10:25:40 +0000"
   const m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}_${m[4]}-${m[5]}`;
   return dateStr.slice(0,10) + '_00-00';
@@ -927,6 +926,10 @@ function normalizeFeatures(features) {
 
 function computeSummary(features) {
   if (!features.length) return {};
+  // Deduplicate by date timestamp - keep last occurrence of each timestamp
+  const seen = new Map();
+  for (const r of features) seen.set(r.date, r);
+  features = Array.from(seen.values());
   const get = key => features.map(r => r[key]).filter(v => typeof v === 'number' && !isNaN(v));
   const avg = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null;
 
