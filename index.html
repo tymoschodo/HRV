@@ -836,11 +836,14 @@ async function processFiles(files) {
     });
 
     progress.innerHTML = `<span class="progress-ok">✓ Sesja ${sessionDate} ${sessionId.slice(11).replace('-',':')} zapisana!</span>`;
+    // Reset file input so same filenames can be uploaded again
+    document.getElementById('file-input').value = '';
     zone.classList.remove('visible');
     await loadAllSessions();
   } catch(e) {
     console.error(e);
     progress.innerHTML = `<span class="progress-err">✗ Błąd: ${e.message}</span>`;
+    document.getElementById('file-input').value = '';
   }
 };
 
