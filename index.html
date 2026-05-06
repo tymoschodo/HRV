@@ -995,23 +995,46 @@ async function loadAllSessions() {
 function renderDateButtons() {
   const container = document.getElementById('date-buttons');
   const last7 = allSessions.slice(-7);
-  container.innerHTML = last7.map(s => `
-    <button class="date-btn" data-date="${s.date}">${formatDate(s.date)}</button>
-  `).join('');
-  container.addEventListener('click', e => {
+
+  // Count how many sessions per calendar date to decide if we show time
+  const dateCounts = {};
+  for (const s of last7) {
+    const d = (s.session_id || s.date).slice(0, 10);
+    dateCounts[d] = (dateCounts[d] || 0) + 1;
+  }
+
+  container.innerHTML = last7.map(s => {
+    const sid = s.session_id || s.date;
+    const dateOnly = sid.slice(0, 10);
+    const hasTime = sid.includes('_') && dateCounts[dateOnly] > 1;
+    const label = hasTime
+      ? formatDate(sid)
+      : formatDate(dateOnly);
+    return `<button class="date-btn" data-sid="${sid}">${label}</button>`;
+  }).join('');
+
+  // Re-attach listener (replace old one)
+  const newContainer = container.cloneNode(true);
+  container.parentNode.replaceChild(newContainer, container);
+  newContainer.addEventListener('click', e => {
     const btn = e.target.closest('.date-btn');
-    if (btn) selectDate(btn.dataset.date);
+    if (btn) selectSid(btn.dataset.sid);
   });
   document.getElementById('date-row').style.display = 'flex';
 }
 
-function selectDate(date) {
-  activeDate = date;
+function selectSid(sid) {
   document.querySelectorAll('.date-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.date === date);
+    b.classList.toggle('active', b.dataset.sid === sid);
   });
-  const session = allSessions.find(s => s.date === date);
+  const session = allSessions.find(s => (s.session_id || s.date) === sid);
   if (session) renderSession(session);
+}
+
+function selectDate(date) {
+  // Legacy - find most recent session for this date
+  const session = allSessions.filter(s => s.date === date).slice(-1)[0];
+  if (session) selectSid(session.session_id || session.date);
 };
 
 function formatDate(d) {
@@ -1305,14 +1328,15 @@ function renderHistory() {
   const rows = [...allSessions].reverse().map(s => {
     const sm = s.summary || {};
     const baseline = getBaseline(s.date);
+    const sid = s.session_id || s.date;
     let deltaClass = '', delta = '—';
     if (baseline?.rmssd && sm.rmssd) {
       const d = (sm.rmssd - baseline.rmssd) / baseline.rmssd * 100;
       delta = (d >= 0 ? '+' : '') + d.toFixed(0) + '%';
       deltaClass = d > 10 ? 'td-good' : d < -20 ? 'td-bad' : 'td-warn';
     }
-    return `<tr data-date="${s.date}">
-      <td>${formatDate(s.date)} <span style="color:var(--text3);font-size:11px;">${s.date}</span></td>
+    return `<tr data-sid="${sid}">
+      <td>${formatDate(sid)} <span style="color:var(--text3);font-size:11px;">${sid}</span></td>
       <td>${sm.rmssd?.toFixed(1) ?? '—'}</td>
       <td>${sm.hr?.toFixed(0) ?? '—'}</td>
       <td>${sm.sdnn?.toFixed(1) ?? '—'}</td>
@@ -1323,8 +1347,8 @@ function renderHistory() {
   }).join('');
   tbody.innerHTML = rows;
   tbody.addEventListener('click', e => {
-    const row = e.target.closest('tr[data-date]');
-    if (row) selectDate(row.dataset.date);
+    const row = e.target.closest('tr[data-sid]');
+    if (row) selectSid(row.dataset.sid);
   });
   document.getElementById('history-panel').style.display = 'block';
 }
